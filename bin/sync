@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+require 'csv'
+require 'octokit'
+
+class CSV
+  class Row
+    def merge_fields(field, merged_field)
+      self[merged_field] = map { |k,v| v if k == field }.compact
+    end
+  end
+end
+
+client = Octokit::Client.new(:access_token => ENV['GITHUB_TOKEN'])
+
+CSV.parse(STDIN.read, headers: true, header_converters: :symbol) do |row|
+  id = row[:id]
+  repo = row[:url].sub('https://github.com/', '').split('/').take(2).join('/')
+  labels = row.merge_fields(:label, :labels).map(&:chomp)
+
+  labels.each do |label|
+    begin
+      client.label(repo, label)
+    rescue Octokit::NotFound
+      STDERR.puts("Unknown label '#{label}' for repo '#{ repo }' applied to issue '#{ id }'")
+      labels.delete(label)
+    end
+  end
+
+  if labels.any?
+    puts "Adding #{labels.join(', ') } to #{ row[:url] }"
+    client.add_labels_to_an_issue(repo, id, labels)
+  end
+end

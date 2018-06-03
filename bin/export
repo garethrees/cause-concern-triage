@@ -1,0 +1,30 @@
+#!/usr/bin/env ruby
+require 'csv'
+require 'octokit'
+
+repo = ARGV[0]
+client = Octokit::Client.new(:access_token => ENV['GITHUB_TOKEN'])
+client.auto_paginate = true
+issues = client.issues(repo).reject(&:pull_request)
+
+max_labels = issues.max_by { |i| i.labels.size }.labels.size
+
+csv = CSV.generate do |csv|
+  csv << %w[id url title] + %w[label] * max_labels
+  issues.each do |issue|
+    labels = issue.labels.map(&:name)
+    # Only care about "type" or feature area (f:)
+    labels.select! do |l|
+      l =~ /f:/ || %w[bug improvement enhancement].include?(l)
+    end
+
+    # Put type first, then feature area
+    labels.sort! do |a, _b|
+      %w[bug improvement enhancement].include?(a) ? -1 : 1
+    end
+
+    csv << [issue.number, issue.html_url, issue.title] + labels
+  end
+end
+
+puts csv

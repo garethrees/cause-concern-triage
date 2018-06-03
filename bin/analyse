@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+require 'csv'
+require 'octokit'
+
+repo = ARGV[0]
+client = Octokit::Client.new(:access_token => ENV['GITHUB_TOKEN'])
+client.auto_paginate = true
+labels = client.labels(repo).select { |l| l.name =~ /^f:/ }
+
+data = {}
+
+labels.each do |label|
+  data[label.name] = { 'bug' => 0, 'improvement' => 0, 'enhancement' => 0 }
+  issues = client.issues(repo, labels: label.name).reject(&:pull_request)
+
+  issues.each do |issue|
+    issue_labels = issue.labels.map(&:name)
+
+    if issue_labels.include?('bug')
+      data[label.name]['bug'] += 1
+    elsif issue_labels.include?('improvement')
+      data[label.name]['improvement'] += 1
+    elsif issue_labels.include?('enhancement')
+      data[label.name]['enhancement'] += 1
+    end
+  end
+
+  data
+end
+
+csv = CSV.generate do |csv|
+  csv << %w[feature bugs improvements enhancements]
+  data.each do |feature, issue_classifications|
+    csv << [feature, issue_classifications['bug'],
+                     issue_classifications['improvement'],
+                     issue_classifications['enhancement']]
+  end
+end
+
+puts csv
